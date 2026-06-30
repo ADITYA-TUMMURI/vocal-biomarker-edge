@@ -4,7 +4,7 @@ import {
   getAveragePeriod,
   calculateJitterAbsolute,
   calculateJitterLocalPercent,
-  calculateJitterRAP
+  calculateJitterRAP,
 } from '../src/core/algorithms/jitter.js';
 
 test('getAveragePeriod should calculate correct average period', () => {
@@ -22,7 +22,7 @@ test('calculateJitterAbsolute should compute correct average differences', () =>
   // Diff list: [10, 10, 10]. Average diff: 10
   const periods = [100, 110, 100, 110];
   assert.strictEqual(calculateJitterAbsolute(periods), 10);
-  
+
   // With sampleRate, convert to seconds
   assert.strictEqual(calculateJitterAbsolute(periods, 1000), 0.01);
 });
@@ -34,7 +34,7 @@ test('calculateJitterLocalPercent should calculate correct percentage jitter', (
   const periods = [100, 110, 100, 110];
   const expected = (10 / 105) * 100;
   const result = calculateJitterLocalPercent(periods);
-  
+
   assert.ok(Math.abs(result - expected) < 1e-5, `Expected ${expected} but got ${result}`);
 });
 
@@ -49,7 +49,7 @@ test('calculateJitterRAP should calculate correct RAP percentage', () => {
   // Average perturbation (numerator): (10 + 10 + 0) / 3 = 6.66667
   // RAP: (6.66667 / 102) * 100 = 6.5359477...
   const periods = [100, 110, 90, 100, 110];
-  const expected = ((20 / 3) / 102) * 100;
+  const expected = (20 / 3 / 102) * 100;
   const result = calculateJitterRAP(periods);
 
   assert.ok(Math.abs(result - expected) < 1e-5, `Expected ${expected} but got ${result}`);

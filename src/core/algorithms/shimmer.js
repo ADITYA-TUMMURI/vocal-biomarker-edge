@@ -1,13 +1,13 @@
 /**
  * Shimmer (Amplitude Perturbation) Algorithms
- * 
+ *
  * Shimmer measures the cycle-to-cycle variation of the peak amplitude of the signal.
  * High shimmer values indicate breathiness, hoarseness, and vocal tract inflammation.
  */
 
 /**
  * Calculates the average peak amplitude of a voice signal.
- * 
+ *
  * @param {number[]} amplitudes - Array of peak amplitudes.
  * @returns {number} The average amplitude, or 0 if empty.
  */
@@ -26,9 +26,9 @@ export function getAverageAmplitude(amplitudes) {
  * Calculates Shimmer (Local, Percent).
  * Represents the average absolute difference between consecutive peak amplitudes,
  * normalized by the average amplitude, expressed as a percentage.
- * 
+ *
  * Threshold for pathological voice: >= 3.810%
- * 
+ *
  * @param {number[]} amplitudes - Array of peak amplitudes.
  * @returns {number} Shimmer (Local) as a percentage.
  */
@@ -52,12 +52,12 @@ export function calculateShimmerLocalPercent(amplitudes) {
  * Calculates Shimmer (dB).
  * Represents the average absolute log-difference of peak amplitudes between
  * consecutive cycles, scaled by 20.
- * 
+ *
  * Threshold for pathological voice: >= 0.350 dB
- * 
+ *
  * Formula:
  * Shimmer(dB) = 1/(N-1) * sum_{i=1}^{N-1} | 20 * log10( A_{i+1} / A_i ) |
- * 
+ *
  * @param {number[]} amplitudes - Array of peak amplitudes.
  * @returns {number} Shimmer (dB) value.
  */
@@ -86,12 +86,12 @@ export function calculateShimmerDB(amplitudes) {
 /**
  * Calculates Shimmer (APQ3 - Amplitude Perturbation Quotient 3).
  * APQ3 is the three-cycle amplitude perturbation quotient.
- * 
+ *
  * Threshold for pathological voice: >= 3.070%
- * 
+ *
  * Formula:
  * APQ3 = ( 1/(N-2) * sum_{i=2}^{N-1} | A_i - (A_{i-1} + A_i + A_{i+1})/3 | ) / ( 1/N * sum_{i=1}^N A_i )
- * 
+ *
  * @param {number[]} amplitudes - Array of peak amplitudes.
  * @returns {number} Shimmer (APQ3) as a percentage.
  */
@@ -100,7 +100,7 @@ export function calculateShimmerAPQ3(amplitudes) {
   if (N < 3) return 0;
 
   // Work with absolute amplitudes
-  const absAmps = amplitudes.map(a => Math.abs(a));
+  const absAmps = amplitudes.map((a) => Math.abs(a));
   const avgAmp = getAverageAmplitude(absAmps);
   if (avgAmp === 0) return 0;
 

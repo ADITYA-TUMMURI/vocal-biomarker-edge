@@ -4,7 +4,7 @@ import {
   getAverageAmplitude,
   calculateShimmerLocalPercent,
   calculateShimmerDB,
-  calculateShimmerAPQ3
+  calculateShimmerAPQ3,
 } from '../src/core/algorithms/shimmer.js';
 
 test('getAverageAmplitude should calculate correct average absolute amplitude', () => {
@@ -59,7 +59,7 @@ test('calculateShimmerAPQ3 should compute correct APQ3 percentage', () => {
   // Average perturbation (numerator): (0.2 + 0.2 + 0) / 3 = 0.133333
   // APQ3: (0.133333 / 0.96) * 100 = 13.8888...
   const amplitudes = [1.0, 0.8, 1.2, 1.0, 0.8];
-  const expected = ((0.4 / 3) / 0.96) * 100;
+  const expected = (0.4 / 3 / 0.96) * 100;
   const result = calculateShimmerAPQ3(amplitudes);
 
   assert.ok(Math.abs(result - expected) < 1e-5, `Expected ${expected} but got ${result}`);
