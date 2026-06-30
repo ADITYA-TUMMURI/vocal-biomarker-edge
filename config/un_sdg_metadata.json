@@ -1,0 +1,75 @@
+{
+  "un_sdg_target": {
+    "goal": 3,
+    "goal_title": "Good Health and Well-being",
+    "target_index": "3.4",
+    "target_description": "By 2030, reduce by one third premature mortality from non-communicable diseases through prevention and treatment and promote mental health and well-being.",
+    "domain": "Digital Phenotyping & Non-Invasive Vocal Biomarkers"
+  },
+  "clinical_metrics": {
+    "vocal_jitter": {
+      "definition": "Cycle-to-cycle variation in the fundamental frequency (F0) of voice.",
+      "primary_measure": "Relative Average Perturbation (RAP)",
+      "mathematical_definition": "Average absolute difference between a period and its three-period local average, normalized by the average period.",
+      "clinical_thresholds": {
+        "normal": {
+          "jitter_local_percent": "< 1.040%",
+          "jitter_rap_percent": "< 0.680%"
+        },
+        "pathological_indication": {
+          "jitter_local_percent": ">= 1.040%",
+          "jitter_rap_percent": ">= 0.680%"
+        }
+      },
+      "clinical_correlates": [
+        "Laryngeal neuromuscular fatigue",
+        "Parkinsonian vocal tremor",
+        "Respiratory effort exhaustion",
+        "Vocal fold pathology (nodules, polyps)"
+      ]
+    },
+    "vocal_shimmer": {
+      "definition": "Cycle-to-cycle variation in the peak amplitude of the voice signal.",
+      "primary_measures": [
+        "Shimmer Local Percent",
+        "Shimmer dB",
+        "Amplitude Perturbation Quotient (APQ3)"
+      ],
+      "clinical_thresholds": {
+        "normal": {
+          "shimmer_local_percent": "< 3.810%",
+          "shimmer_db": "< 0.350 dB",
+          "shimmer_apq3_percent": "< 3.070%"
+        },
+        "pathological_indication": {
+          "shimmer_local_percent": ">= 3.810%",
+          "shimmer_db": ">= 0.350 dB",
+          "shimmer_apq3_percent": ">= 3.070%"
+        }
+      },
+      "clinical_correlates": [
+        "Glottal closure insufficiency (breathiness)",
+        "Upper respiratory tract mucosal swelling (e.g., laryngitis, COPD flare-up)",
+        "Neuromuscular weakness affecting vocal fold tension"
+      ]
+    }
+  },
+  "edge_compute_specification": {
+    "audio_pipeline": "Browser-native Web Audio API (AnalyserNode / ScriptProcessorNode / AudioWorklet)",
+    "feature_extractor": "Meyda",
+    "required_features": [
+      "mfcc",
+      "spectralFlatness"
+    ],
+    "buffer_sizes": [
+      1024,
+      2048,
+      4096
+    ],
+    "sample_rates_hz": [
+      44100,
+      48000
+    ],
+    "privacy_model": "100% Client-Side Processing. Zero raw audio data transmitted to backend servers."
+  }
+}
