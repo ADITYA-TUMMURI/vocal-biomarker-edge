@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acoustic Vocal Biomarker Edge Screening Platform</title>
+  <meta name="description" content="100% client-side digital phenotyping tool for laryngeal and respiratory pathology screening (UN SDG 3.4) utilizing Web Audio API and Meyda.">
+  <link rel="stylesheet" href="./index.css">
+  <!-- Load Meyda library from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/meyda@5.6.3/dist/web/meyda.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <header>
+      <div class="brand-section">
+        <h1>VocalBiomarker <span style="color: var(--accent-cyan);">Edge</span></h1>
+        <p>Acoustic Screening & Digital Phenotyping Engine</p>
+      </div>
+      <div style="display: flex; gap: 1rem; align-items: center;">
+        <div class="privacy-badge">100% Client-Side Privacy</div>
+        <div class="sdg-badge">UN Target 3.4</div>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <!-- Left Column: Controls & Real-Time Visualization -->
+      <section class="left-col">
+        <!-- Controls Panel -->
+        <article class="glass-panel">
+          <h2 class="panel-title">
+            <svg style="width: 1.25rem; height: 1.25rem; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 2C9.24 2 7 4.24 7 7v5c0 2.76 2.24 5 5 5s5-2.24 5-5V7c0-2.76-2.24-5-5-5zm0 14c-1.66 0-3-1.34-3-3V7c0-1.66 1.34-3 3-3s3 1.34 3 3v6c0 1.66-1.34 3-3 3zm7-3c0 3.87-3.13 7-7 7s-7-3.13-7-7H3c0 4.42 3.28 8.06 7.5 8.84V21h3v-2.16c4.22-.78 7.5-4.42 7.5-8.84h-2z"/></svg>
+            Capture Console
+          </h2>
+          <div class="controls-layout">
+            <div class="select-group">
+              <div>
+                <label for="mic-select" class="field-label">Audio Input</label>
+                <select id="mic-select">
+                  <option value="">Detecting Devices...</option>
+                </select>
+              </div>
+              <div>
+                <label for="buffer-select" class="field-label">Buffer Size</label>
+                <select id="buffer-select">
+                  <option value="1024">1024 samples</option>
+                  <option value="2048" selected>2048 samples</option>
+                  <option value="4096">4096 samples</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="button-group">
+              <button id="btn-record" class="btn btn-record" title="Start Recording">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+                <span>Start</span>
+              </button>
+              
+              <button id="btn-pause" class="btn" title="Pause/Resume Recording" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                <span>Pause</span>
+              </button>
+
+              <button id="btn-stop" class="btn" title="Stop Recording & Analyze" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6V6z"/></svg>
+                <span>Stop</span>
+              </button>
+
+              <button id="btn-reset" class="btn" title="Reset Session" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                <span>Reset</span>
+              </button>
+            </div>
+
+            <div class="status-indicator">
+              <div class="status-dot-label">
+                <span id="status-dot" class="status-dot"></span>
+                <span id="status-text">System Idle</span>
+              </div>
+              <div id="status-time" class="status-time">00:00</div>
+            </div>
+            
+            <button id="btn-playback" class="btn" style="width: 100%; display: flex; flex-direction: row; gap: 0.5rem;" disabled>
+              <svg viewBox="0 0 24 24" fill="currentColor" style="width: 1.1rem; height: 1.1rem;"><path d="M8 5v14l11-7z"/></svg>
+              <span>Playback Voice</span>
+            </button>
+          </div>
+        </article>
+
+        <!-- Visualization Panel -->
+        <article class="glass-panel visualizer-container" style="flex-grow: 1;">
+          <h2 class="panel-title">
+            <svg style="width: 1.25rem; height: 1.25rem; fill: currentColor;" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+            Edge Feature Stream
+          </h2>
+          
+          <div class="canvas-wrapper">
+            <span class="canvas-label">Raw Signal Waveform (Oscilloscope)</span>
+            <canvas id="waveform-canvas"></canvas>
+          </div>
+          
+          <div class="canvas-wrapper">
+            <span class="canvas-label">Mel-Frequency Cepstral Coefficients (MFCC)</span>
+            <canvas id="mfcc-canvas"></canvas>
+          </div>
+
+          <div class="canvas-wrapper">
+            <span class="canvas-label">Spectral Flatness Trend (Noise vs. Voicing)</span>
+            <canvas id="flatness-canvas"></canvas>
+          </div>
+        </article>
+      </section>
+
+      <!-- Right Column: Diagnostics, Scoring, and Clinical Correlates -->
+      <section class="right-col">
+        <!-- Diagnostic Summary -->
+        <article class="glass-panel" style="padding: 0;">
+          <div id="risk-card" class="risk-card neutral">
+            <div class="risk-subtitle">Clinical Assessment</div>
+            <div id="risk-title" class="risk-title">Awaiting Capture</div>
+            <p id="risk-desc" class="risk-description">
+              Please record a steady vowel sound (e.g., "ah") for at least 3-4 seconds to extract biomarkers.
+            </p>
+          </div>
+        </article>
+
+        <!-- Metrics Breakdowns -->
+        <article class="glass-panel">
+          <h2 class="panel-title">
+            <svg style="width: 1.25rem; height: 1.25rem; fill: currentColor;" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+            Clinical Acoustic Biomarkers
+          </h2>
+          <div class="metrics-grid">
+            <!-- F0 Pitch -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-name">Pitch (F0)</span>
+                <span class="metric-status-dot"></span>
+              </div>
+              <div class="metric-value-container">
+                <span id="val-f0" class="metric-value">--</span>
+                <span class="metric-unit">Hz</span>
+              </div>
+              <span class="metric-threshold">Normal: 50 - 500 Hz</span>
+            </div>
+
+            <!-- Jitter Local -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-name">Jitter (Local)</span>
+                <span id="dot-jitter-local" class="metric-status-dot"></span>
+              </div>
+              <div class="metric-value-container">
+                <span id="val-jitter-local" class="metric-value">--</span>
+                <span class="metric-unit">%</span>
+              </div>
+              <span class="metric-threshold">Normal: < 1.040%</span>
+            </div>
+
+            <!-- Jitter RAP -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-name">Jitter (RAP)</span>
+                <span id="dot-jitter-rap" class="metric-status-dot"></span>
+              </div>
+              <div class="metric-value-container">
+                <span id="val-jitter-rap" class="metric-value">--</span>
+                <span class="metric-unit">%</span>
+              </div>
+              <span class="metric-threshold">Normal: < 0.680%</span>
+            </div>
+
+            <!-- Shimmer Local -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-name">Shimmer (Local)</span>
+                <span id="dot-shimmer-local" class="metric-status-dot"></span>
+              </div>
+              <div class="metric-value-container">
+                <span id="val-shimmer-local" class="metric-value">--</span>
+                <span class="metric-unit">%</span>
+              </div>
+              <span class="metric-threshold">Normal: < 3.810%</span>
+            </div>
+
+            <!-- Shimmer dB -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-name">Shimmer (dB)</span>
+                <span id="dot-shimmer-db" class="metric-status-dot"></span>
+              </div>
+              <div class="metric-value-container">
+                <span id="val-shimmer-db" class="metric-value">--</span>
+                <span class="metric-unit">dB</span>
+              </div>
+              <span class="metric-threshold">Normal: < 0.350 dB</span>
+            </div>
+
+            <!-- Shimmer APQ3 -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-name">Shimmer (APQ3)</span>
+                <span id="dot-shimmer-apq3" class="metric-status-dot"></span>
+              </div>
+              <div class="metric-value-container">
+                <span id="val-shimmer-apq3" class="metric-value">--</span>
+                <span class="metric-unit">%</span>
+              </div>
+              <span class="metric-threshold">Normal: < 3.070%</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Educational / Diagnostics Info -->
+        <article class="glass-panel clinical-info">
+          <h4>Clinical Indication Profile & Correlates</h4>
+          <ul class="clinical-correlates-list">
+            <li>Laryngeal fatigue & strain</li>
+            <li>Mucosal vocal fold swelling</li>
+            <li>Neuromuscular vocal tremors</li>
+            <li>Glottal closure breathing gap</li>
+          </ul>
+
+          <div class="disclaimer-card">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            <div>
+              <strong>Screening Disclaimer:</strong> This application parses vocal markers entirely on-device for screening purposes. It does not provide medical diagnoses or replace consultations with certified healthcare professionals.
+            </div>
+          </div>
+          
+          <div class="action-row">
+            <button id="btn-export" class="btn-export" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 1.1rem; height: 1.1rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              Export JSON Report
+            </button>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./src/core/dashboard.js"></script>
+</body>
+</html>
