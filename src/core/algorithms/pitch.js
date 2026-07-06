@@ -61,7 +61,7 @@ export function centerClip(buffer, clippingThresholdRatio = 0.3) {
 export function detectPitchAutocorrelation(buffer, sampleRate, options = {}) {
   const minFreq = options.minFreq || 50;
   const maxFreq = options.maxFreq || 500;
-  const voicedThreshold = options.voicedThreshold || 0.25;
+  const voicedThreshold = options.voicedThreshold || 0.45;
 
   const results = { frequency: 0, periodSamples: 0, isVoiced: false };
   const length = buffer.length;
@@ -116,8 +116,18 @@ export function detectPitchAutocorrelation(buffer, sampleRate, options = {}) {
   // Voicing decision: is the peak significant relative to signal energy?
   const peakRatio = maxR / r0;
   if (bestLag !== -1 && peakRatio >= voicedThreshold) {
-    results.frequency = sampleRate / bestLag;
-    results.periodSamples = bestLag;
+    let exactLag = bestLag;
+    if (bestLag > minLag && bestLag < maxLag) {
+      const y0 = r[bestLag - 1];
+      const y1 = r[bestLag];
+      const y2 = r[bestLag + 1];
+      const denom = y0 - 2 * y1 + y2;
+      if (Math.abs(denom) > 1e-6) {
+        exactLag += (0.5 * (y0 - y2)) / denom;
+      }
+    }
+    results.frequency = sampleRate / exactLag;
+    results.periodSamples = exactLag;
     results.isVoiced = true;
   }
 
@@ -142,13 +152,33 @@ export function extractCyclesAndAmplitudes(buffer, sampleRate, estPeriodSamples)
     return { periods, amplitudes };
   }
 
-  // Step 1: Find the first major peak as anchor point
-  let currentIdx = 0;
+  // Helper for parabolic interpolation to achieve sub-sample peak precision
+  const getSubSampleOffset = (idx) => {
+    if (idx <= 0 || idx >= length - 1) return 0;
+    const y0 = Math.abs(buffer[idx - 1]);
+    const y1 = Math.abs(buffer[idx]);
+    const y2 = Math.abs(buffer[idx + 1]);
+    const denom = y0 - 2 * y1 + y2;
+    if (Math.abs(denom) < 1e-6) return 0;
+    return (0.5 * (y0 - y2)) / denom;
+  };
+
+  // Step 1: Find the first major peak in a voiced region as anchor point
+  let startIdx = 0;
+  while (startIdx < length && Math.abs(buffer[startIdx]) < 0.025) {
+    startIdx++;
+  }
+
+  if (startIdx >= length) {
+    return { periods, amplitudes };
+  }
+
+  let currentIdx = startIdx;
   let maxAmp = 0;
 
-  // Search the first 1.5 periods for the starting peak
-  const initialSearchRange = Math.min(length, Math.round(estPeriodSamples * 1.5));
-  for (let i = 0; i < initialSearchRange; i++) {
+  // Search 0.75 periods from startIdx for the starting anchor peak
+  const initialSearchRange = Math.min(length, startIdx + Math.round(estPeriodSamples * 0.75));
+  for (let i = startIdx; i < initialSearchRange; i++) {
     const absVal = Math.abs(buffer[i]);
     if (absVal > maxAmp) {
       maxAmp = absVal;
@@ -156,11 +186,14 @@ export function extractCyclesAndAmplitudes(buffer, sampleRate, estPeriodSamples)
     }
   }
 
+  let currentExactIdx = currentIdx + getSubSampleOffset(currentIdx);
+
   // Step 2: Track subsequent cycles by leaping by estPeriodSamples and searching locally
-  const tolerance = Math.round(estPeriodSamples * 0.25); // 25% jitter tolerance
+  // Tighten tolerance to 8% to prevent jumping to secondary formant ripples
+  const tolerance = Math.max(2, Math.round(estPeriodSamples * 0.08));
 
   while (currentIdx < length) {
-    const nextTargetIdx = currentIdx + estPeriodSamples;
+    const nextTargetIdx = Math.round(currentExactIdx + estPeriodSamples);
     if (nextTargetIdx >= length) {
       break;
     }
@@ -184,21 +217,22 @@ export function extractCyclesAndAmplitudes(buffer, sampleRate, estPeriodSamples)
       }
     }
 
-    if (localPeakIdx !== -1) {
-      const actualPeriod = localPeakIdx - currentIdx;
+    if (localPeakIdx !== -1 && localMaxAmp >= 0.025) {
+      const localExactIdx = localPeakIdx + getSubSampleOffset(localPeakIdx);
+      const actualPeriod = localExactIdx - currentExactIdx;
 
       // Sanity check: Ensure period is within reasonable bounds of estimation
-      if (actualPeriod >= estPeriodSamples * 0.5 && actualPeriod <= estPeriodSamples * 1.8) {
+      if (actualPeriod >= estPeriodSamples * 0.7 && actualPeriod <= estPeriodSamples * 1.3) {
         periods.push(actualPeriod);
         amplitudes.push(localMaxAmp);
         currentIdx = localPeakIdx;
-      } else {
-        // Fallback: Skip if cycle is distorted
-        currentIdx = nextTargetIdx;
+        currentExactIdx = localExactIdx;
+        continue;
       }
-    } else {
-      break;
     }
+    // Fallback: Skip if cycle is distorted, silent, or unvoiced without aborting the loop
+    currentIdx = nextTargetIdx;
+    currentExactIdx = nextTargetIdx;
   }
 
   return { periods, amplitudes };

@@ -36,11 +36,20 @@ export function calculateJitterAbsolute(periods, sampleRate = null) {
   if (N < 2) return 0;
 
   let sumDiff = 0;
+  let validPairs = 0;
+  const avgPeriod = getAveragePeriod(periods);
+  const maxAllowedDiff = avgPeriod * 0.3; // biological limit: max 30% jump per cycle
+
   for (let i = 0; i < N - 1; i++) {
-    sumDiff += Math.abs(periods[i] - periods[i + 1]);
+    const diff = Math.abs(periods[i] - periods[i + 1]);
+    if (diff < maxAllowedDiff) {
+      sumDiff += diff;
+      validPairs++;
+    }
   }
 
-  const avgDiffSamples = sumDiff / (N - 1);
+  if (validPairs === 0) return 0;
+  const avgDiffSamples = sumDiff / validPairs;
 
   if (sampleRate) {
     // Convert samples to seconds: duration_sec = samples / sampleRate
@@ -91,12 +100,20 @@ export function calculateJitterRAP(periods) {
   if (avgPeriod === 0) return 0;
 
   let perturbationSum = 0;
+  let validTriplets = 0;
+  const maxAllowedDiff = avgPeriod * 0.3; // biological limit: max 30% jump
+
   for (let i = 1; i < N - 1; i++) {
     const localAvg = (periods[i - 1] + periods[i] + periods[i + 1]) / 3;
-    perturbationSum += Math.abs(periods[i] - localAvg);
+    const diff = Math.abs(periods[i] - localAvg);
+    if (diff < maxAllowedDiff) {
+      perturbationSum += diff;
+      validTriplets++;
+    }
   }
 
-  const averagePerturbation = perturbationSum / (N - 2);
+  if (validTriplets === 0) return 0;
+  const averagePerturbation = perturbationSum / validTriplets;
 
   // Return as percentage to keep consistent with standard clinical tools (like Praat)
   return (averagePerturbation / avgPeriod) * 100;

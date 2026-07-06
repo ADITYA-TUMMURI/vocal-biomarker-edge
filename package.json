@@ -5,6 +5,7 @@
   "type": "module",
   "main": "src/core/algorithms/index.js",
   "scripts": {
+    "dev": "node server.js",
     "test": "node --test tests/*.test.js",
     "lint": "eslint src/**/*.js tests/**/*.js",
     "format": "prettier --write src/**/*.js tests/**/*.js"
