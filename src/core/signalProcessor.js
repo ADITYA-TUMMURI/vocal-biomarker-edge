@@ -13,6 +13,38 @@ import {
   calculateShimmerAPQ3,
 } from './algorithms/index.js';
 
+/**
+ * 1st-order IIR High-Pass Filter run twice (steeper 12dB/octave slope)
+ * to remove DC offsets, breathing low-frequency rumble, and 50/60 Hz power hum.
+ */
+function applyHighPassFilter(samples, sampleRate, cutoff = 80) {
+  const rc = 1.0 / (2.0 * Math.PI * cutoff);
+  const dt = 1.0 / sampleRate;
+  const alpha = rc / (rc + dt);
+
+  // Pass 1
+  let prevRaw = 0;
+  let prevFiltered = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const raw = samples[i];
+    const filtered = alpha * (prevFiltered + raw - prevRaw);
+    prevRaw = raw;
+    prevFiltered = filtered;
+    samples[i] = filtered;
+  }
+
+  // Pass 2
+  prevRaw = 0;
+  prevFiltered = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const raw = samples[i];
+    const filtered = alpha * (prevFiltered + raw - prevRaw);
+    prevRaw = raw;
+    prevFiltered = filtered;
+    samples[i] = filtered;
+  }
+}
+
 export class VocalAudioProcessor {
   constructor() {
     this.audioContext = null;
@@ -69,6 +101,7 @@ export class VocalAudioProcessor {
     // 3. Reset state
     this.accumulatedSamples = [];
     this.featuresHistory = [];
+    this.voicedBlocksCount = 0;
     this.isRecording = true;
     this.isPaused = false;
 
@@ -90,6 +123,20 @@ export class VocalAudioProcessor {
         try {
           const features = window.Meyda.extract(['mfcc', 'spectralFlatness', 'rms'], bufferClone);
           if (features) {
+            // Live voicing check for real-time UI indicator
+            let isVoiced = false;
+            if (features.rms >= 0.025) {
+              const pitchRes = detectPitchAutocorrelation(bufferClone, this.sampleRate, {
+                minFreq: 50,
+                maxFreq: 500,
+                voicedThreshold: 0.45,
+              });
+              isVoiced = pitchRes.isVoiced && pitchRes.frequency > 0;
+            }
+            if (isVoiced) {
+              this.voicedBlocksCount = (this.voicedBlocksCount || 0) + 1;
+            }
+
             this.featuresHistory.push({
               mfcc: features.mfcc,
               spectralFlatness: features.spectralFlatness,
@@ -98,7 +145,11 @@ export class VocalAudioProcessor {
             });
 
             if (this.onFeaturesExtracted) {
-              this.onFeaturesExtracted(features, bufferClone);
+              this.onFeaturesExtracted(features, bufferClone, {
+                totalBlocks: this.accumulatedSamples.length,
+                voicedBlocksCount: this.voicedBlocksCount || 0,
+                isSufficient: (this.voicedBlocksCount || 0) >= 15,
+              });
             }
           }
         } catch (err) {
@@ -197,54 +248,71 @@ export class VocalAudioProcessor {
       };
     }
 
+    // Apply High-Pass Filter to remove breathing drift, DC offset, and low-frequency electrical hum
+    applyHighPassFilter(rawAudio, sampleRate, 80);
+
     const blockSize = this.bufferSize;
     const hopSize = Math.floor(blockSize / 2);
     const sampleCount = rawAudio.length;
 
     const voicedBlocks = [];
-    const pitchPeriods = [];
-    const peakAmplitudes = [];
 
-    // Analyze block-by-block to trace pitch periods and amplitudes
+    // Step 1: Analyze block-by-block using autocorrelation to find average F0 and detect voiced segments
     for (let i = 0; i + blockSize <= sampleCount; i += hopSize) {
       const block = rawAudio.subarray(i, i + blockSize);
+
+      // Amplitude Gate: filter out background room noise and silence
+      let sumSq = 0;
+      for (let j = 0; j < block.length; j++) {
+        sumSq += block[j] * block[j];
+      }
+      const rms = Math.sqrt(sumSq / block.length);
+      if (rms < 0.025) continue;
+
       const pitchResult = detectPitchAutocorrelation(block, sampleRate, {
         minFreq: 50,
         maxFreq: 500,
-        voicedThreshold: 0.25,
+        voicedThreshold: 0.45,
       });
 
       if (pitchResult.isVoiced && pitchResult.frequency > 0) {
-        const { periods, amplitudes } = extractCyclesAndAmplitudes(
-          block,
-          sampleRate,
-          pitchResult.periodSamples
-        );
-
-        if (periods.length > 0) {
-          pitchPeriods.push(...periods);
-          peakAmplitudes.push(...amplitudes);
-          voicedBlocks.push({
-            frequency: pitchResult.frequency,
-            periodSamples: pitchResult.periodSamples,
-          });
-        }
+        voicedBlocks.push({
+          frequency: pitchResult.frequency,
+          periodSamples: pitchResult.periodSamples,
+        });
       }
     }
 
-    // Require at least a small set of voiced cycles to determine biomarkers
-    if (pitchPeriods.length < 3 || peakAmplitudes.length < 3) {
+    if (voicedBlocks.length < 15) {
       return {
         success: false,
-        error: 'Insufficient voiced speech detected. Please speak steadily and try again.',
+        error: 'No clear, steady vowel sound detected (too much background noise or silence). Please record a steady "ahh" clearly for at least 3-4 seconds.',
       };
     }
 
-    // F0 calculations
+    // Step 2: Calculate overall average F0 and estimated period across all voiced blocks
     const frequencies = voicedBlocks.map((b) => b.frequency);
     const avgF0 = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
     const minF0 = Math.min(...frequencies);
     const maxF0 = Math.max(...frequencies);
+
+    const periodsList = voicedBlocks.map((b) => b.periodSamples);
+    const avgPeriodSamples = Math.round(periodsList.reduce((a, b) => a + b, 0) / periodsList.length);
+
+    // Step 3: Extract individual cycle periods and peak amplitudes ONCE across the entire audio stream
+    // This avoids overlapping block duplications and boundary discontinuities!
+    const { periods: pitchPeriods, amplitudes: peakAmplitudes } = extractCyclesAndAmplitudes(
+      rawAudio,
+      sampleRate,
+      avgPeriodSamples
+    );
+
+    if (pitchPeriods.length < 3 || peakAmplitudes.length < 3) {
+      return {
+        success: false,
+        error: 'Insufficient voiced cycles extracted. Please speak steadily and try again.',
+      };
+    }
 
     // Vocal Jitter calculations
     const jitterLocalPercent = calculateJitterLocalPercent(pitchPeriods);

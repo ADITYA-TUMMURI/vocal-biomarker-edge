@@ -5,6 +5,10 @@ let recordedData = null; // Store { rawAudio, sampleRate, features }
 let playbackState = null; // Store { source, ctx }
 let recordingStartTime = 0;
 let recordingTimerInterval = null;
+let isDrawing = false;
+let currentRawBuffer = null;
+let currentMFCC = null;
+let currentFlatness = null;
 
 // DOM Elements
 const micSelect = document.getElementById('mic-select');
@@ -48,11 +52,11 @@ const dotShimmerAPQ3 = document.getElementById('dot-shimmer-apq3');
 
 // Clinical threshold limits parsed dynamically from JSON
 const thresholds = {
-  jitterLocal: 1.040,
-  jitterRAP: 0.680,
-  shimmerLocal: 3.810,
-  shimmerDB: 0.350,
-  shimmerAPQ3: 3.070,
+  jitterLocal: 1.04,
+  jitterRAP: 0.68,
+  shimmerLocal: 3.81,
+  shimmerDB: 0.35,
+  shimmerAPQ3: 3.07,
 };
 
 let unSdgTarget = null;
@@ -112,8 +116,7 @@ async function loadMetadata() {
 
       if (jThresholdStr) thresholds.jitterLocal = parseFloat(jThresholdStr.replace(/[^\d.]/g, ''));
       if (jRapStr) thresholds.jitterRAP = parseFloat(jRapStr.replace(/[^\d.]/g, ''));
-      if (sThresholdStr)
-        thresholds.shimmerLocal = parseFloat(sThresholdStr.replace(/[^\d.]/g, ''));
+      if (sThresholdStr) thresholds.shimmerLocal = parseFloat(sThresholdStr.replace(/[^\d.]/g, ''));
       if (sDbStr) thresholds.shimmerDB = parseFloat(sDbStr.replace(/[^\d.]/g, ''));
       if (sApq3Str) thresholds.shimmerAPQ3 = parseFloat(sApq3Str.replace(/[^\d.]/g, ''));
     }
@@ -153,6 +156,23 @@ function resizeCanvases() {
   });
 }
 
+// Drawing loop using requestAnimationFrame to prevent thread blocking
+function drawLoop() {
+  if (!isDrawing) return;
+
+  if (currentRawBuffer && waveformCtx && waveformCanvas) {
+    drawWaveform(waveformCanvas, waveformCtx, currentRawBuffer);
+  }
+  if (currentMFCC && mfccCtx && mfccCanvas) {
+    drawMFCC(mfccCanvas, mfccCtx, currentMFCC);
+  }
+  if (typeof currentFlatness === 'number' && flatnessCtx && flatnessCanvas) {
+    drawFlatness(flatnessCanvas, flatnessCtx, currentFlatness);
+  }
+
+  requestAnimationFrame(drawLoop);
+}
+
 // Recording start
 async function startRecording() {
   try {
@@ -162,16 +182,29 @@ async function startRecording() {
     // Stop playback if playing
     stopPlayback();
 
-    // Set up features handler callback
-    processor.onFeaturesExtracted = (features, rawBuffer) => {
-      if (waveformCtx && waveformCanvas) {
-        drawWaveform(waveformCanvas, waveformCtx, rawBuffer);
-      }
-      if (mfccCtx && mfccCanvas && features.mfcc) {
-        drawMFCC(mfccCanvas, mfccCtx, features.mfcc);
-      }
-      if (flatnessCtx && flatnessCanvas && typeof features.spectralFlatness === 'number') {
-        drawFlatness(flatnessCanvas, flatnessCtx, features.spectralFlatness);
+    // Reset drawing parameters
+    currentRawBuffer = null;
+    currentMFCC = null;
+    currentFlatness = null;
+
+    // Set up features handler callback to update rolling values and live voicing status
+    processor.onFeaturesExtracted = (features, rawBuffer, info) => {
+      currentRawBuffer = rawBuffer;
+      currentMFCC = features.mfcc;
+      currentFlatness = features.spectralFlatness;
+
+      if (info) {
+        if (info.isSufficient) {
+          statusDot.className = 'status-dot active';
+          statusDot.style.backgroundColor = '#10b981';
+          statusDot.style.boxShadow = '0 0 10px #10b981';
+          statusText.textContent = `Recording: Sufficient Speech Captured (${info.voicedBlocksCount} voiced blocks) - Ready to Stop`;
+        } else {
+          statusDot.className = 'status-dot active';
+          statusDot.style.backgroundColor = '';
+          statusDot.style.boxShadow = '';
+          statusText.textContent = `Recording Vocal Signal... (${info.voicedBlocksCount}/15 voiced blocks needed)`;
+        }
       }
     };
 
@@ -186,8 +219,15 @@ async function startRecording() {
 
     recordingStartTime = Date.now();
     startTimer();
+
+    // Start drawing animation frames
+    isDrawing = true;
+    requestAnimationFrame(drawLoop);
   } catch (err) {
-    alert(`Audio recording failed to start: ${err.message}`);
+    // Show user-friendly error card instead of default alert popup
+    riskCard.className = 'risk-card pathology';
+    riskTitle.textContent = 'Hardware Access Error';
+    riskDesc.textContent = `Microphone capture failed: ${err.message || 'Permission denied'}. Please check system privacy settings and try again.`;
     updateUIState('idle');
   }
 }
@@ -206,6 +246,7 @@ function togglePause() {
 // Recording stop
 function stopRecording() {
   stopTimer();
+  isDrawing = false;
   recordedData = processor.stop();
   updateUIState('stopped');
 
@@ -217,8 +258,13 @@ function stopRecording() {
 // Reset session
 function resetSession() {
   stopPlayback();
+  isDrawing = false;
   recordedData = null;
   flatnessHistory.length = 0;
+
+  currentRawBuffer = null;
+  currentMFCC = null;
+  currentFlatness = null;
 
   // Reset diagnostic UI
   riskCard.className = 'risk-card neutral';
@@ -311,6 +357,8 @@ function stopTimer() {
 
 // UI State Manager
 function updateUIState(state) {
+  statusDot.style.backgroundColor = '';
+  statusDot.style.boxShadow = '';
   switch (state) {
     case 'idle':
       btnRecord.disabled = false;
@@ -411,10 +459,17 @@ function analyzeVoiceData() {
     isShimmerAPQ3Elevated;
 
   if (isPathological) {
+    const elevatedList = [];
+    if (isJitterLocalElevated) elevatedList.push('Jitter (Local)');
+    if (isJitterRAPElevated) elevatedList.push('Jitter (RAP)');
+    if (isShimmerLocalElevated) elevatedList.push('Shimmer (Local)');
+    if (isShimmerDBElevated) elevatedList.push('Shimmer (dB)');
+    if (isShimmerAPQ3Elevated) elevatedList.push('Shimmer (APQ3)');
+
     riskCard.className = 'risk-card pathology';
     riskTitle.textContent = 'Pathological Indication';
     riskDesc.textContent =
-      'Analysis shows elevated vocal frequency or amplitude perturbation. This matches clinical correlates for vocal strain, neuromuscular fatigue, or mucosal swelling.';
+      `Analysis shows elevated perturbation in: ${elevatedList.join(', ')}. This matches clinical correlates for vocal strain, neuromuscular fatigue, or mucosal swelling. Note: In non-clinical room environments, speaking too quietly or too far from the microphone can also inflate amplitude perturbation.`;
   } else {
     riskCard.className = 'risk-card normal';
     riskTitle.textContent = 'Normal Vocal Screening';

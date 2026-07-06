@@ -40,11 +40,19 @@ export function calculateShimmerLocalPercent(amplitudes) {
   if (avgAmp === 0) return 0;
 
   let sumDiff = 0;
+  let validPairs = 0;
+  const maxAllowedDiff = avgAmp * 0.4; // biological limit: max 40% amplitude jump
+
   for (let i = 0; i < N - 1; i++) {
-    sumDiff += Math.abs(Math.abs(amplitudes[i]) - Math.abs(amplitudes[i + 1]));
+    const diff = Math.abs(Math.abs(amplitudes[i]) - Math.abs(amplitudes[i + 1]));
+    if (diff < maxAllowedDiff) {
+      sumDiff += diff;
+      validPairs++;
+    }
   }
 
-  const avgDiff = sumDiff / (N - 1);
+  if (validPairs === 0) return 0;
+  const avgDiff = sumDiff / validPairs;
   return (avgDiff / avgAmp) * 100;
 }
 
@@ -74,8 +82,11 @@ export function calculateShimmerDB(amplitudes) {
 
     // Avoid division by zero or log of zero
     if (a1 > 1e-6 && a2 > 1e-6) {
-      sumLogDiff += Math.abs(20 * Math.log10(a2 / a1));
-      validPairs++;
+      const dbDiff = Math.abs(20 * Math.log10(a2 / a1));
+      if (dbDiff < 3.0) { // Limit to 3dB max biological change per cycle
+        sumLogDiff += dbDiff;
+        validPairs++;
+      }
     }
   }
 
@@ -105,11 +116,19 @@ export function calculateShimmerAPQ3(amplitudes) {
   if (avgAmp === 0) return 0;
 
   let perturbationSum = 0;
+  let validTriplets = 0;
+  const maxAllowedDiff = avgAmp * 0.4;
+
   for (let i = 1; i < N - 1; i++) {
     const localAvg = (absAmps[i - 1] + absAmps[i] + absAmps[i + 1]) / 3;
-    perturbationSum += Math.abs(absAmps[i] - localAvg);
+    const diff = Math.abs(absAmps[i] - localAvg);
+    if (diff < maxAllowedDiff) {
+      perturbationSum += diff;
+      validTriplets++;
+    }
   }
 
-  const averagePerturbation = perturbationSum / (N - 2);
+  if (validTriplets === 0) return 0;
+  const averagePerturbation = perturbationSum / validTriplets;
   return (averagePerturbation / avgAmp) * 100;
 }
